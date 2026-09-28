@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Fingerspell — ASL Alphabet Reader</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --bg: #14161f;
+    --panel: #1c1f2b;
+    --panel-2: #232739;
+    --line: #2e3245;
+    --ink: #e9e7de;
+    --ink-dim: #9a9db0;
+    --gold: #e0a83e;
+    --teal: #5fb3ac;
+    --red: #d9695f;
+    --green: #7fbf7f;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'Space Grotesk',sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 60px;}
+
+  .masthead{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:22px;flex-wrap:wrap;gap:10px;}
+  .masthead h1{font-size:26px;font-weight:700;margin:0;letter-spacing:0.2px;}
+  .masthead h1 span{color:var(--gold);}
+  .masthead .sub{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-dim);letter-spacing:0.5px;text-transform:uppercase;}
+
+  .grid{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;}
+  @media (max-width:880px){.grid{grid-template-columns:1fr;}}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .panel-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;color:var(--ink-dim);}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ink-dim);display:inline-block;margin-right:6px;}
+  .dot.live{background:var(--teal);box-shadow:0 0 6px var(--teal);}
+  .dot.off{background:var(--red);}
+
+  .stage{position:relative;background:#0b0c12;aspect-ratio:4/3;}
+  .stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);opacity:0;}
+  .stage canvas{position:absolute;inset:0;width:100%;height:100%;}
+  .stage .hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:var(--ink-dim);font-family:'JetBrains Mono',monospace;font-size:12px;text-align:center;padding:20px;}
+
+  button{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;border-radius:7px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);padding:9px 16px;cursor:pointer;transition:border-color .15s, color .15s;}
+  button:hover{border-color:var(--gold);color:var(--gold);}
+  button.primary{background:var(--gold);border-color:var(--gold);color:#1a1305;}
+  button.primary:hover{background:#eab655;color:#1a1305;}
+  button:disabled{opacity:0.4;cursor:not-allowed;}
+  select{font-family:'JetBrains Mono',monospace;font-size:13px;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:8px 10px;}
+
+  .controls{display:flex;gap:10px;padding:12px 14px;flex-wrap:wrap;align-items:center;}
+
+  .letter-card{padding:22px 14px 26px;text-align:center;}
+  .letter-big{font-size:150px;font-weight:700;line-height:1;color:var(--gold);text-shadow:0 0 40px rgba(224,168,62,0.25);min-height:170px;display:flex;align-items:center;justify-content:center;}
+  .letter-big.idle{color:var(--ink-dim);font-size:22px;font-family:'JetBrains Mono',monospace;font-weight:400;}
+  .letter-big.calibrated{color:var(--green);}
+  .meter{height:6px;border-radius:4px;background:var(--panel-2);margin:10px auto 4px;width:80%;overflow:hidden;}
+  .meter i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--teal),var(--gold));transition:width .08s linear;}
+  .meter-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--ink-dim);letter-spacing:0.5px;text-transform:uppercase;}
+  .src-tag{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--green);margin-top:6px;min-height:14px;letter-spacing:0.5px;text-transform:uppercase;}
+
+  .word-panel{margin-top:20px;}
+  .tape{min-height:64px;padding:16px 14px;font-family:'JetBrains Mono',monospace;font-size:26px;letter-spacing:3px;color:var(--ink);word-break:break-all;line-height:1.4;}
+  .tape .cursor{display:inline-block;width:2px;height:24px;background:var(--gold);vertical-align:middle;animation:blink 1s step-start infinite;margin-left:2px;}
+  @keyframes blink{50%{opacity:0;}}
+  .tape .placeholder{color:var(--ink-dim);letter-spacing:0.5px;font-size:13px;}
+
+  .ref{padding:12px 14px 16px;}
+  .ref-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:5px;}
+  .ref-cell{position:relative;aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:var(--panel-2);border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-dim);border:1px solid transparent;}
+  .ref-cell.on{color:#1a1305;background:var(--gold);border-color:var(--gold);font-weight:600;}
+  .ref-cell.trained::after{content:'';position:absolute;top:2px;right:2px;width:5px;height:5px;border-radius:50%;background:var(--green);}
+  .ref-note{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-dim);margin-top:10px;line-height:1.6;}
+
+  .train-row{padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-dim);line-height:1.6;}
+  .capture-status{font-family:'JetBrains Mono',monospace;font-size:11px;min-height:16px;}
+
+  footer{margin-top:24px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-dim);line-height:1.7;border-top:1px solid var(--line);padding-top:14px;}
+  footer b{color:var(--ink);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div>
+      <h1>Finger<span>spell</span></h1>
+      <div class="sub">Static ASL alphabet reader — on-device hand tracking</div>
+    </div>
+    <div class="sub" id="fpsTag">— fps</div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT: camera / skeleton -->
+    <div class="panel">
+      <div class="panel-head">
+        <span><span class="dot" id="liveDot"></span><span id="liveText">camera off</span></span>
+        <span id="handTag">no hand</span>
+      </div>
+      <div class="stage" id="stage">
+        <video id="video" playsinline muted></video>
+        <canvas id="canvas"></canvas>
+        <div class="hint" id="hint">
+          <div>Start the camera and fingerspell a letter facing the lens.<br>Plain background &amp; even light help accuracy.</div>
+          <button class="primary" id="startBtn">Start camera</button>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="stopBtn" disabled>Stop camera</button>
+        <button id="mirrorBtn">Toggle mirror</button>
+      </div>
+
+      <!-- Training / calibration panel -->
+      <div class="panel-head" style="border-top:1px solid var(--line);">
+        <span>Train your hand (optional, boosts accuracy)</span>
+        <span id="trainedCount">0 / 24 calibrated</span>
+      </div>
+      <div class="train-row">
+        Pick a letter, hold that exact handshape steady in frame, then capture. Your own samples are matched first and override the generic rules for that letter — a couple of tries per letter noticeably improves reliability for your hand and camera angle. Calibration lives only in this session (nothing is saved to disk).
+      </div>
+      <div class="controls">
+        <select id="letterSelect"></select>
+        <button class="primary" id="captureBtn" disabled>Capture pose</button>
+        <button id="clearLetterBtn">Clear this letter</button>
+        <button id="clearAllBtn">Clear all training</button>
+      </div>
+      <div class="capture-status" id="captureStatus" style="padding:0 14px 12px;"></div>
+    </div>
+
+    <!-- RIGHT: result + word builder + reference -->
+    <div>
+      <div class="panel letter-card">
+        <div class="meter-label">Detected letter</div>
+        <div class="letter-big idle" id="bigLetter">waiting for hand…</div>
+        <div class="meter"><i id="meterFill"></i></div>
+        <div class="meter-label" id="meterLabel">stability 0%</div>
+        <div class="src-tag" id="srcTag"></div>
+      </div>
+
+      <div class="panel word-panel">
+        <div class="panel-head">
+          <span>Word builder</span>
+          <span id="autoTag">auto-add: on</span>
+        </div>
+        <div class="tape" id="tape"><span class="placeholder">spelled letters appear here…</span></div>
+        <div class="controls">
+          <button id="spaceBtn">Space</button>
+          <button id="backBtn">Backspace</button>
+          <button id="clearBtn">Clear</button>
+          <button id="autoBtn">Pause auto-add</button>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:20px;">
+        <div class="panel-head"><span>Supported letters</span></div>
+        <div class="ref">
+          <div class="ref-grid" id="refGrid"></div>
+          <div class="ref-note">J and Z involve motion traces rather than a static handshape, so they're excluded. Green dot = you've trained that letter. G/Q and K/P share a handshape and are told apart by whether your hand points sideways/up or down — keep your wrist visible so that reads correctly.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Runs entirely in your browser. Hand landmarks come from Google's <b>MediaPipe Hands</b> model (loaded from jsDelivr); letter classification is a rule-based matcher over palm-relative geometry (finger curl angles, thumb position in a palm-local coordinate frame, fingertip distances), with an optional per-user k-nearest-neighbor layer built from poses you capture in the Train panel. No video or captured pose data leaves your device. Treat this as a demo / learning tool, not a certified interpreter.
+  </footer>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
+<script>
+(function(){
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const mirrorBtn = document.getElementById('mirrorBtn');
+  const hint = document.getElementById('hint');
+  const liveDot = document.getElementById('liveDot');
+  const liveText = document.getElementById('liveText');
+  const handTag = document.getElementById('handTag');
+  const fpsTag = document.getElementById('fpsTag');
+  const bigLetter = document.getElementById('bigLetter');
+  const meterFill = document.getElementById('meterFill');
+  const meterLabel = document.getElementById('meterLabel');
+  const srcTag = document.getElementById('srcTag');
+  const tape = document.getElementById('tape');
+  const spaceBtn = document.getElementById('spaceBtn');
+  const backBtn = document.getElementById('backBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const autoBtn = document.getElementById('autoBtn');
+  const autoTag = document.getElementById('autoTag');
+  const refGrid = document.getElementById('refGrid');
+  const letterSelect = document.getElementById('letterSelect');
+  const captureBtn = document.getElementById('captureBtn');
+  const clearLetterBtn = document.getElementById('clearLetterBtn');
+  const clearAllBtn = document.getElementById('clearAllBtn');
+  const captureStatus = document.getElementById('captureStatus');
+  const trainedCount = document.getElementById('trainedCount');
+
+  const LETTERS = "ABCDEFGHIKLMNOPQRSTUVWXY".split(""); // J, Z excluded (motion letters)
+  LETTERS.forEach(l=>{
+    const d=document.createElement('div');
+    d.className='ref-cell';
+    d.id='ref-'+l;
+    d.textContent=l;
+    refGrid.appendChild(d);
+    const opt=document.createElement('option');
+    opt.value=l; opt.textContent=l;
+    letterSelect.appendChild(opt);
+  });
+
+  let mirrored = true;
+  let camera = null;
+  let hands = null;
+  let lastTime = performance.now();
+  let frameCount = 0;
+  let latestFeat = null;   // most recent computed feature object
+  let latestVec = null;    // most recent feature array
+  let handPresent = false;
+
+  // ---------------- geometry helpers ----------------
+  function sub(a,b){ return {x:a.x-b.x,y:a.y-b.y,z:(a.z||0)-(b.z||0)}; }
+  function dot3(a,b){ return a.x*b.x+a.y*b.y+a.z*b.z; }
+  function cross3(a,b){ return {x:a.y*b.z-a.z*b.y, y:a.z*b.x-a.x*b.z, z:a.x*b.y-a.y*b.x}; }
+  function norm3(a){ const m=Math.hypot(a.x,a.y,a.z)||1e-6; return {x:a.x/m,y:a.y/m,z:a.z/m}; }
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y, (a.z||0)-(b.z||0)); }
+  function angleAt(b,a,c){
+    const v1=sub(a,b), v2=sub(c,b);
+    const d=dot3(v1,v2);
+    const m1=Math.hypot(v1.x,v1.y,v1.z), m2=Math.hypot(v2.x,v2.y,v2.z);
+    if(m1<1e-6||m2<1e-6) return 180;
+    let cc=d/(m1*m2);
+    cc=Math.max(-1,Math.min(1,cc));
+    return Math.acos(cc)*180/Math.PI;
+  }
+  function angleBetweenVec(v1,v2){
+    const d=dot3(v1,v2);
+    const m1=Math.hypot(v1.x,v1.y,v1.z), m2=Math.hypot(v2.x,v2.y,v2.z);
+    if(m1<1e-6||m2<1e-6) return 90;
+    let cc=d/(m1*m2);
+    cc=Math.max(-1,Math.min(1,cc));
+    return Math.acos(cc)*180/Math.PI;
+  }
+
+  // ---------------- landmark smoothing ----------------
+  let smoothed = null;
+  const SMOOTH_ALPHA = 0.55; // weight on new frame
+  function smoothLandmarks(lm){
+    if(!smoothed){
+      smoothed = lm.map(p=>({x:p.x,y:p.y,z:p.z||0}));
+      return smoothed;
+    }
+    for(let i=0;i<lm.length;i++){
+      smoothed[i].x = SMOOTH_ALPHA*lm[i].x + (1-SMOOTH_ALPHA)*smoothed[i].x;
+      smoothed[i].y = SMOOTH_ALPHA*lm[i].y + (1-SMOOTH_ALPHA)*smoothed[i].y;
+      smoothed[i].z = SMOOTH_ALPHA*(lm[i].z||0) + (1-SMOOTH_ALPHA)*smoothed[i].z;
+    }
+    return smoothed;
+  }
+
+  // ---------------- palm-local frame ----------------
+  // Builds an orthonormal frame from the palm so thumb/finger positions can be
+  // read as "toward fingertips / across palm / toward camera" regardless of
+  // how the hand is rotated on screen.
+  function buildFrame(lm){
+    const wrist=lm[0], indexMcp=lm[5], middleMcp=lm[9], pinkyMcp=lm[17];
+    const eyRaw = sub(middleMcp, wrist);           // long axis of hand
+    const exRaw = sub(pinkyMcp, indexMcp);         // across the knuckles
+    let ez = norm3(cross3(exRaw, eyRaw));           // palm normal
+    let ey = norm3(eyRaw);
+    let ex = norm3(cross3(ey, ez));                 // re-orthogonalized across axis
+    const scale = dist(wrist, middleMcp) || 0.001;
+    return {origin:wrist, ex, ey, ez, scale};
+  }
+  function toLocal(p, frame){
+    const v = sub(p, frame.origin);
+    return {
+      x: dot3(v, frame.ex)/frame.scale,
+      y: dot3(v, frame.ey)/frame.scale,
+      z: dot3(v, frame.ez)/frame.scale
+    };
+  }
+
+  // ---------------- feature extraction ----------------
+  function computeFeatures(lm){
+    const frame = buildFrame(lm);
+    const wrist=lm[0];
+    const scale = frame.scale;
+
+    const fingers = {
+      index:  {mcp:lm[5],  pip:lm[6],  dip:lm[7],  tip:lm[8]},
+      middle: {mcp:lm[9],  pip:lm[10], dip:lm[11], tip:lm[12]},
+      ring:   {mcp:lm[13], pip:lm[14], dip:lm[15], tip:lm[16]},
+      pinky:  {mcp:lm[17], pip:lm[18], dip:lm[19], tip:lm[20]},
+    };
+    const curl = {};
+    for(const k in fingers){
+      const f=fingers[k];
+      curl[k]=angleAt(f.pip, f.mcp, f.tip); // rotation-invariant: ~180 straight, small = curled
+    }
+    const state = k => curl[k] > 155 ? 'ext' : (curl[k] < 95 ? 'curl' : 'half');
+    const S = { index:state('index'), middle:state('middle'), ring:state('ring'), pinky:state('pinky') };
+    const extCount = Object.values(S).filter(v=>v==='ext').length;
+
+    const thumbTip=lm[4], thumbIp=lm[3], thumbMcp=lm[2], thumbCmc=lm[1];
+    const thumbAngle = angleAt(thumbIp, thumbMcp, thumbTip);
+    const thumbLocal = toLocal(thumbTip, frame);
+    const thumbToIndexMcp = dist(thumbTip, lm[5]) / scale;
+    const thumbExt = thumbAngle > 140 && thumbToIndexMcp > 0.55;
+
+    const tIdx = dist(thumbTip, fingers.index.tip)/scale;
+    const tMid = dist(thumbTip, fingers.middle.tip)/scale;
+    const tRing = dist(thumbTip, fingers.ring.tip)/scale;
+    const tPinky = dist(thumbTip, fingers.pinky.tip)/scale;
+
+    const dTI = dist(thumbTip, fingers.index.mcp)/scale;
+    const dTM = dist(thumbTip, fingers.middle.mcp)/scale;
+    const dTR = dist(thumbTip, fingers.ring.mcp)/scale;
+    const dTP = dist(thumbTip, fingers.pinky.mcp)/scale;
+
+    const idxMidSpread = dist(fingers.index.tip, fingers.middle.tip)/scale;
+    const midRingSpread = dist(fingers.middle.tip, fingers.ring.tip)/scale;
+    const ringPinkySpread = dist(fingers.ring.tip, fingers.pinky.tip)/scale;
+
+    const avgCurl4 = (curl.index+curl.middle+curl.ring+curl.pinky)/4;
+
+    const crossed = (S.index==='ext' && S.middle==='ext') &&
+      ((fingers.index.mcp.x - fingers.middle.mcp.x) * (fingers.index.tip.x - fingers.middle.tip.x) < 0);
+
+    // screen-space pointing direction of the hand's long axis, used only to
+    // tell apart same-handshape pairs like G/Q and K/P (sideways vs down)
+    const eyWorld = sub(lm[9], lm[0]);
+    const pointAngle = Math.atan2(eyWorld.y, eyWorld.x) * 180/Math.PI; // -180..180
+    let pointBucket = 'side';
+    if(pointAngle > 45 && pointAngle < 135) pointBucket='down';
+    else if(pointAngle < -45 && pointAngle > -135) pointBucket='up';
+
+    const vIndexDir = sub(fingers.index.tip, fingers.index.mcp);
+    const vThumbDir = sub(thumbTip, thumbMcp);
+    const thumbIndexAngle = angleBetweenVec(vIndexDir, vThumbDir);
+
+    return {
+      curl, S, extCount, thumbAngle, thumbExt, thumbLocal, thumbToIndexMcp,
+      tIdx, tMid, tRing, tPinky, dTI, dTM, dTR, dTP,
+      idxMidSpread, midRingSpread, ringPinkySpread, avgCurl4,
+      crossed, pointBucket, thumbIndexAngle
+    };
+  }
+
+  function featureVector(feat){
+    return [
+      feat.curl.index, feat.curl.middle, feat.curl.ring, feat.curl.pinky,
+      feat.thumbAngle,
+      feat.tIdx, feat.tMid, feat.tRing, feat.tPinky,
+      feat.dTI, feat.dTM, feat.dTR, feat.dTP,
+      feat.idxMidSpread, feat.midRingSpread, feat.ringPinkySpread,
+      feat.thumbLocal.x, feat.thumbLocal.y, feat.thumbLocal.z,
+      feat.thumbIndexAngle
+    ];
+  }
+  function vecDist(a,b){
+    let s=0;
+    for(let i=0;i<a.length;i++){ const d=a[i]-b[i]; s+=d*d; }
+    return Math.sqrt(s);
+  }
+
+  // ---------------- rule-based classifier (fallback / default) ----------------
+  function classifyRule(feat){
+    const {S, extCount, curl, thumbAngle, thumbExt, thumbLocal, tIdx, tMid,
+           dTI, dTM, dTR, dTP, idxMidSpread, avgCurl4, crossed, pointBucket,
+           thumbIndexAngle} = feat;
+
+    if (tIdx < 0.32 && S.middle==='ext' && S.ring==='ext' && S.pinky==='ext') return 'F';
+    if (tIdx < 0.30 && S.index!=='ext' && S.middle!=='ext' && S.ring!=='ext' && S.pinky!=='ext' && avgCurl4>90) return 'O';
+
+    if (extCount===0 && avgCurl4 > 95 && avgCurl4 < 155 && thumbAngle > 90 && thumbAngle < 165 && tIdx > 0.3) return 'C';
+
+    if (extCount===2 && S.index==='ext' && S.middle==='ext'){
+      if (crossed) return 'R';
+      if (thumbExt && tMid < 0.5) return pointBucket==='down' ? 'P' : 'K';
+      if (idxMidSpread > 0.22) return 'V';
+      return 'U';
+    }
+
+    if (extCount===3 && S.index==='ext' && S.middle==='ext' && S.ring==='ext' && S.pinky!=='ext') return 'W';
+    if (extCount===4) return 'B';
+
+    if (extCount===1){
+      if (S.index==='ext'){
+        if (!thumbExt) return 'D';
+        if (thumbIndexAngle < 45) return pointBucket==='down' ? 'Q' : 'G';
+        if (thumbIndexAngle > 65) return 'L';
+        return 'D';
+      }
+      if (S.pinky==='ext'){
+        return thumbExt ? 'Y' : 'I';
+      }
+    }
+
+    if (extCount===0 && S.index==='half' && S.middle==='curl' && S.ring==='curl' && S.pinky==='curl') return 'X';
+
+    if (extCount===0){
+      if (Math.abs(thumbLocal.x) > 0.35 && thumbAngle > 110) return 'A';
+      const dists = [['T',dTI],['N',dTM],['M', Math.min(dTR,dTP)]];
+      dists.sort((a,b)=>a[1]-b[1]);
+      if (dists[0][1] < 0.34) return dists[0][0];
+      if (thumbLocal.z > 0.15) return 'S';
+      return 'E';
+    }
+    return null;
+  }
+
+  // ---------------- personal calibration (k-NN layer) ----------------
+  const calib = {}; // letter -> array of feature-vector arrays
+  const NN_DIST_THRESHOLD = 1.05;
+  const NN_MARGIN = 0.12;
+
+  function nnClassify(vec){
+    let best=null, bestD=Infinity, second=Infinity;
+    for(const letter in calib){
+      for(const sample of calib[letter]){
+        const d = vecDist(vec, sample);
+        if(d < bestD){ second=bestD; bestD=d; best=letter; }
+        else if(d < second){ second=d; }
+      }
+    }
+    if(best && bestD < NN_DIST_THRESHOLD && (second-bestD) > NN_MARGIN){
+      return {letter:best, dist:bestD};
+    }
+    return null;
+  }
+
+  function updateTrainedUI(){
+    let n=0;
+    LETTERS.forEach(l=>{
+      const cell=document.getElementById('ref-'+l);
+      const has = calib[l] && calib[l].length>0;
+      cell.classList.toggle('trained', !!has);
+      if(has) n++;
+    });
+    trainedCount.textContent = n+' / '+LETTERS.length+' calibrated';
+  }
+  updateTrainedUI();
+
+  captureBtn.onclick = ()=>{
+    if(!latestVec || !handPresent){
+      captureStatus.textContent = 'No hand detected right now — get your hand clearly in frame first.';
+      captureStatus.style.color = 'var(--red)';
+      return;
+    }
+    const letter = letterSelect.value;
+    if(!calib[letter]) calib[letter]=[];
+    calib[letter].push(latestVec.slice());
+    if(calib[letter].length>4) calib[letter].shift();
+    updateTrainedUI();
+    captureStatus.style.color = 'var(--green)';
+    captureStatus.textContent = 'Captured "'+letter+'" ('+calib[letter].length+' sample'+(calib[letter].length>1?'s':'')+' stored).';
+  };
+  clearLetterBtn.onclick = ()=>{
+    const letter = letterSelect.value;
+    delete calib[letter];
+    updateTrainedUI();
+    captureStatus.style.color = 'var(--ink-dim)';
+    captureStatus.textContent = 'Cleared training for "'+letter+'".';
+  };
+  clearAllBtn.onclick = ()=>{
+    for(const k in calib) delete calib[k];
+    updateTrainedUI();
+    captureStatus.style.color = 'var(--ink-dim)';
+    captureStatus.textContent = 'Cleared all training.';
+  };
+
+  // ---------------- temporal label smoothing ----------------
+  const HISTORY = 12;
+  let history = [];
+  let lastAdded = null;
+  let autoAdd = true;
+  let cooldownFrames = 0;
+
+  function pushPrediction(letter){
+    history.push(letter);
+    if(history.length>HISTORY) history.shift();
+    const counts={};
+    history.forEach(l=>{ if(l) counts[l]=(counts[l]||0)+1; });
+    let best=null,bestC=0;
+    for(const k in counts){ if(counts[k]>bestC){best=k;bestC=counts[k];} }
+    const stability = history.length ? Math.round((bestC/history.length)*100) : 0;
+    return {best, stability};
+  }
+
+  function updateUI(best, stability, source){
+    document.querySelectorAll('.ref-cell').forEach(c=>c.classList.remove('on'));
+    bigLetter.classList.remove('calibrated');
+    if(best){
+      bigLetter.textContent = best;
+      bigLetter.classList.remove('idle');
+      if(source==='trained') bigLetter.classList.add('calibrated');
+      const cell=document.getElementById('ref-'+best);
+      if(cell) cell.classList.add('on');
+      srcTag.textContent = source==='trained' ? 'matched your trained sample' : 'matched generic rule';
+    } else {
+      bigLetter.textContent = 'waiting for hand…';
+      bigLetter.classList.add('idle');
+      srcTag.textContent = '';
+    }
+    meterFill.style.width = stability+'%';
+    meterLabel.textContent = 'stability ' + stability + '%';
+
+    if (autoAdd && best && stability>=75){
+      cooldownFrames++;
+      if(cooldownFrames>10 && best!==lastAdded){
+        appendLetter(best);
+        lastAdded = best;
+        cooldownFrames=0;
+      }
+    } else if (!best){
+      lastAdded=null;
+      cooldownFrames=0;
+    }
+  }
+
+  function appendLetter(l){
+    if(tape.querySelector('.placeholder')) tape.innerHTML='';
+    const cursor=tape.querySelector('.cursor');
+    if(cursor) cursor.remove();
+    tape.innerHTML += l;
+    const c=document.createElement('span');
+    c.className='cursor';
+    tape.appendChild(c);
+  }
+  function appendSpace(){
+    if(tape.querySelector('.placeholder')) tape.innerHTML='';
+    const cursor=tape.querySelector('.cursor');
+    if(cursor) cursor.remove();
+    tape.innerHTML += '\u00A0\u00A0';
+    const c=document.createElement('span');
+    c.className='cursor';
+    tape.appendChild(c);
+  }
+  function backspace(){
+    let text = tape.textContent.replace(/\u00A0/g,' ');
+    text = text.slice(0,-1);
+    tape.innerHTML='';
+    if(text.length===0){
+      tape.innerHTML='<span class="placeholder">spelled letters appear here…</span>';
+    } else {
+      tape.textContent = text;
+      const c=document.createElement('span');
+      c.className='cursor';
+      tape.appendChild(c);
+    }
+  }
+  function clearTape(){
+    tape.innerHTML='<span class="placeholder">spelled letters appear here…</span>';
+    lastAdded=null;
+  }
+
+  spaceBtn.onclick = appendSpace;
+  backBtn.onclick = backspace;
+  clearBtn.onclick = clearTape;
+  autoBtn.onclick = ()=>{
+    autoAdd=!autoAdd;
+    autoTag.textContent = 'auto-add: ' + (autoAdd?'on':'off');
+    autoBtn.textContent = autoAdd ? 'Pause auto-add' : 'Resume auto-add';
+  };
+  mirrorBtn.onclick = ()=>{ mirrored=!mirrored; video.style.transform = mirrored ? 'scaleX(-1)' : 'scaleX(1)'; };
+
+  // ---------------- drawing ----------------
+  const BONES = [
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [5,9],[9,10],[10,11],[11,12],
+    [9,13],[13,14],[14,15],[15,16],
+    [13,17],[17,18],[18,19],[19,20],
+    [0,17]
+  ];
+
+  function resizeCanvas(){
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+  }
+  window.addEventListener('resize', resizeCanvas);
+
+  function drawHand(landmarks){
+    const w=canvas.width, h=canvas.height;
+    ctx.lineWidth=2.5;
+    ctx.strokeStyle='rgba(95,179,172,0.85)';
+    BONES.forEach(([a,b])=>{
+      const p1=landmarks[a], p2=landmarks[b];
+      ctx.beginPath();
+      ctx.moveTo(p1.x*w, p1.y*h);
+      ctx.lineTo(p2.x*w, p2.y*h);
+      ctx.stroke();
+    });
+    landmarks.forEach((p,i)=>{
+      ctx.beginPath();
+      ctx.fillStyle = (i%4===0 && i!==0) ? '#e0a83e' : '#f2e6c9';
+      ctx.arc(p.x*w, p.y*h, i===0?5:3.4, 0, Math.PI*2);
+      ctx.fill();
+    });
+  }
+
+  function onResults(results){
+    resizeCanvas();
+    ctx.save();
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    frameCount++;
+    const now=performance.now();
+    if(now-lastTime>500){
+      fpsTag.textContent = Math.round(frameCount/((now-lastTime)/1000)) + ' fps';
+      frameCount=0; lastTime=now;
+    }
+
+    if(results.multiHandLandmarks && results.multiHandLandmarks.length>0){
+      handPresent = true;
+      handTag.textContent = results.multiHandLandmarks.length>1 ? '2 hands (using first)' : '1 hand';
+      const rawLm = results.multiHandLandmarks[0];
+      const lm = smoothLandmarks(rawLm);
+      drawHand(lm);
+
+      const feat = computeFeatures(lm);
+      const vec = featureVector(feat);
+      latestFeat = feat; latestVec = vec;
+      captureBtn.disabled = false;
+
+      const nn = nnClassify(vec);
+      let letter, source;
+      if(nn){ letter=nn.letter; source='trained'; }
+      else { letter=classifyRule(feat); source='rule'; }
+
+      const {best, stability} = pushPrediction(letter);
+      updateUI(best, stability, source);
+    } else {
+      handPresent = false;
+      captureBtn.disabled = true;
+      handTag.textContent='no hand';
+      smoothed = null;
+      const {best, stability} = pushPrediction(null);
+      updateUI(best, stability, null);
+    }
+    ctx.restore();
+  }
+
+  async function startCamera(){
+    startBtn.disabled=true;
+    startBtn.textContent='starting…';
+    try{
+      hands = new Hands({locateFile:(f)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`});
+      hands.setOptions({
+        maxNumHands:1,
+        modelComplexity:1,
+        minDetectionConfidence:0.75,
+        minTrackingConfidence:0.7
+      });
+      hands.onResults(onResults);
+
+      camera = new Camera(video, {
+        onFrame: async ()=>{ await hands.send({image:video}); },
+        width:640, height:480
+      });
+      await camera.start();
+
+      video.style.opacity='1';
+      hint.style.display='none';
+      liveDot.classList.add('live');
+      liveDot.classList.remove('off');
+      liveText.textContent='camera live';
+      stopBtn.disabled=false;
+      resizeCanvas();
+    }catch(err){
+      console.error(err);
+      hint.innerHTML = '<div style="color:#d9695f;max-width:320px;">Could not access the camera: '+(err.message||err)+'<br><br>Check that this page has camera permission, then try again.</div>';
+      startBtn.disabled=false;
+      startBtn.textContent='Start camera';
+    }
+  }
+
+  function stopCamera(){
+    if(camera){ camera.stop(); }
+    if(video.srcObject){ video.srcObject.getTracks().forEach(t=>t.stop()); }
+    video.style.opacity='0';
+    hint.style.display='flex';
+    startBtn.disabled=false;
+    startBtn.textContent='Start camera';
+    stopBtn.disabled=true;
+    captureBtn.disabled=true;
+    liveDot.classList.remove('live');
+    liveDot.classList.add('off');
+    liveText.textContent='camera off';
+    handTag.textContent='no hand';
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    bigLetter.textContent='waiting for hand…';
+    bigLetter.classList.add('idle');
+    bigLetter.classList.remove('calibrated');
+    meterFill.style.width='0%';
+    meterLabel.textContent='stability 0%';
+    srcTag.textContent='';
+    history=[];
+    smoothed=null;
+  }
+
+  startBtn.onclick = startCamera;
+  stopBtn.onclick = stopCamera;
+  resizeCanvas();
+})();
+</script>
+</body>
+</html>
